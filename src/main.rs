@@ -1,3 +1,8 @@
+use chessie_benchmarks::*;
+
 fn main() {
-    println!("Hello, world!");
+    let epd = parse_epd("src/standard.epd").unwrap();
+    let epd = &epd[..2];
+
+    bench::<true>(&epd).unwrap()
 }
