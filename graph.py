@@ -1,8 +1,9 @@
 import pandas as pd
 import matplotlib.pyplot as plt
-import numpy as np
 
-data = pd.read_csv("benchmark_data.csv")
+NAME = "chessie-0.1.0"
+
+data = pd.read_csv(f"benchmarks/{NAME}.csv")
 
 
 #n_groups = data["test"].max()
@@ -35,6 +36,9 @@ def make_avg_graph(data):
 
     plt.tight_layout()  # Adjust layout to fit labels
     plt.show()
+
+    # plt.savefig(f'figures/{NAME}.png')
+
 
 
 def make_barcode(data):

@@ -19,7 +19,9 @@ pub fn bench<const PRINT: bool>(epd: &[EpdEntry]) -> Result<()> {
 
     // let _chess = chess::Board::run_bench::<PRINT>(epd)?;
 
-    let mut writer = Writer::from_path("benchmark_data.csv")?;
+    const CHESSIE_VERSION: &str = "0.1.0";
+    let csv_file_name = format!("chessie-{CHESSIE_VERSION}.csv");
+    let mut writer = Writer::from_path(Path::new("benchmarks").join(csv_file_name))?;
     writer.write_record(&["name", "test", "fen", "nodes", "time", "nps", "m_nps"])?;
 
     for (i, (fen, depths)) in epd.into_iter().enumerate() {
