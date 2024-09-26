@@ -1,34 +1,38 @@
 use std::{
-    fs,
+    fs::{self, File},
     path::Path,
-    str::FromStr,
     time::{Duration, Instant},
 };
 
 use anyhow::{anyhow, Result};
-use shakmaty::{FromSetup, Position};
+use csv::Writer;
+use shakmaty::Position;
 
 type EpdEntry = (String, Vec<u64>);
 
 pub fn bench<const PRINT: bool>(epd: &[EpdEntry]) -> Result<()> {
-    let _shakmaty = shakmaty::Chess::run_bench::<PRINT>(epd)?;
+    // let _chessie = chessie::Game::run_bench::<PRINT>(epd)?;
 
-    let _cozy_chess = cozy_chess::Board::run_bench::<PRINT>(epd)?;
+    // let _shakmaty = shakmaty::Chess::run_bench::<PRINT>(epd)?;
 
-    let _chess = chess::Board::run_bench::<PRINT>(epd)?;
+    // let _cozy_chess = cozy_chess::Board::run_bench::<PRINT>(epd)?;
 
-    let _chessie = chessie::Game::run_bench::<PRINT>(epd)?;
-    Ok(())
-}
+    // let _chess = chess::Board::run_bench::<PRINT>(epd)?;
 
-pub fn run_bench_on<const PRINT: bool>(fen: &str, depths: &[u64]) -> Result<()> {
-    let _shakmaty = shakmaty::Chess::run_bench_on::<PRINT>(fen, depths)?;
+    let mut writer = Writer::from_path("benchmark_data.csv")?;
+    writer.write_record(&["name", "test", "fen", "nodes", "time", "nps", "m_nps"])?;
 
-    let _cozy_chess = cozy_chess::Board::run_bench_on::<PRINT>(fen, depths)?;
+    for (i, (fen, depths)) in epd.into_iter().enumerate() {
+        let _shakmaty = shakmaty::Chess::run_bench_on::<PRINT>(i, fen, depths, &mut writer)?;
 
-    let _chess = chess::Board::run_bench_on::<PRINT>(fen, depths)?;
+        let _cozy_chess = cozy_chess::Board::run_bench_on::<PRINT>(i, fen, depths, &mut writer)?;
 
-    let _chessie = chessie::Game::run_bench_on::<PRINT>(fen, depths)?;
+        let _chess = chess::Board::run_bench_on::<PRINT>(i, fen, depths, &mut writer)?;
+
+        let _chessie = chessie::Game::run_bench_on::<PRINT>(i, fen, depths, &mut writer)?;
+    }
+
+    writer.flush()?;
     Ok(())
 }
 
@@ -78,27 +82,38 @@ where
     // fn make_move(&mut self, mv: Self::Move);
     fn legal_moves(&self) -> impl IntoIterator<Item = Self::Move>;
 
-    fn run_bench<const PRINT: bool>(epd: &[EpdEntry]) -> Result<Duration> {
+    /*
+    fn run_bench<const PRINT: bool>(epd: &[EpdEntry]) -> Result<(Duration, u64)> {
         let name = Self::name();
         let mut elapsed = Duration::default();
+        let mut nodes = 0;
 
         for (fen, depths) in epd {
-            elapsed += Self::run_bench_on::<PRINT>(fen, depths)?;
+            let (e, n) = Self::run_bench_on::<PRINT>(fen, depths)?;
+            elapsed += e;
+            nodes += n;
         }
 
         // if PRINT {
         eprintln!("{name} finished bench suite in {elapsed:?}");
         // }
 
-        Ok(elapsed)
+        Ok((elapsed, nodes))
     }
+     */
 
-    fn run_bench_on<const PRINT: bool>(fen: &str, depths: &[u64]) -> Result<Duration> {
+    fn run_bench_on<const PRINT: bool>(
+        test_num: usize,
+        fen: &str,
+        depths: &[u64],
+        writer: &mut Writer<File>,
+    ) -> Result<(Duration, u64)> {
         let name = Self::name();
+        let mut nodes = 0;
         let now = Instant::now();
         let board = Self::from_fen(&fen)?;
         if PRINT {
-            eprint!("\nRunning {name} on {fen}\n\tDepth: ");
+            eprint!("\nRunning {name} on {test_num}: {fen}\n\tDepth: ");
         }
 
         for depth in depths {
@@ -106,7 +121,7 @@ where
                 eprint!("{depth} ");
             }
 
-            perft::<false>(board.clone(), *depth);
+            nodes += perft::<false>(board.clone(), *depth);
         }
 
         if PRINT {
@@ -114,10 +129,23 @@ where
         }
 
         let elapsed = now.elapsed();
+        let nps = nodes as f32 / elapsed.as_secs_f32();
+        let m_nps = nps / 1_000_000.0;
+
+        writer.write_record(&[
+            name.to_string(),
+            test_num.to_string(),
+            fen.to_string(),
+            nodes.to_string(),
+            elapsed.as_secs_f32().to_string(),
+            nps.to_string(),
+            m_nps.to_string(),
+        ])?;
+
         // if PRINT {
         // eprintln!("{name} finished position in {elapsed:?}");
         // }
-        Ok(elapsed)
+        Ok((elapsed, nodes))
     }
 }
 
@@ -125,7 +153,7 @@ impl Chessboard for chessie::Game {
     type Move = chessie::Move;
 
     fn name() -> &'static str {
-        "chessie"
+        "chessie 0.1.0"
     }
 
     fn from_fen(fen: &str) -> Result<Self> {
@@ -145,7 +173,7 @@ impl Chessboard for chess::Board {
     type Move = chess::ChessMove;
 
     fn name() -> &'static str {
-        "chess"
+        "chess 3.2.0"
     }
 
     fn from_fen(fen: &str) -> Result<Self> {
@@ -165,7 +193,7 @@ impl Chessboard for cozy_chess::Board {
     type Move = cozy_chess::Move;
 
     fn name() -> &'static str {
-        "cozy-chess"
+        "cozy-chess 0.3.4"
     }
 
     fn from_fen(fen: &str) -> Result<Self> {
@@ -191,13 +219,13 @@ impl Chessboard for shakmaty::Chess {
     type Move = shakmaty::Move;
 
     fn name() -> &'static str {
-        "shakmaty"
+        "shakmaty 0.27.2"
     }
 
     fn from_fen(fen: &str) -> Result<Self> {
-        let setup = shakmaty::fen::Fen::from_str(fen)?;
-        shakmaty::Chess::from_setup(setup.into(), shakmaty::CastlingMode::Standard)
-            .map_err(|e| anyhow!("{e}"))
+        fen.parse::<shakmaty::fen::Fen>()?
+            .into_position(shakmaty::CastlingMode::Standard)
+            .map_err(|e| anyhow!("shakmaty failed on {fen:?}:\n{e}"))
     }
 
     fn new_with_move_made(mut self, mv: Self::Move) -> Self {
